@@ -111,7 +111,9 @@ namespace SimpleCache.Standard
             }
             set
             {
-                _cache[key.ToString()] = value;
+                _cache.Set(key.ToString(),
+                    value,
+                    _policy);
             }
         }
 

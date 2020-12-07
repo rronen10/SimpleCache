@@ -60,7 +60,9 @@ namespace SimpleCache.Standard
             }
             set
             {
-                _cache[string.Empty] = value;
+                _cache.Set(string.Empty,
+                    value,
+                    _policy);
             }
         }
         #endregion
