@@ -18,7 +18,7 @@ namespace SimpleCache
         /// </summary>
         /// <param name="getValueFunc">Function that returns the object (When the object is not in the cache, this method will be called)</param>
         public CacheObject(Func<T> getValueFunc)
-            : this(Properties.Settings.Default.DefaultCacheTimeoutSeconds, getValueFunc)
+            : this(60, getValueFunc)
         {
         }
 
@@ -60,7 +60,9 @@ namespace SimpleCache
             }
             set
             {
-                _cache[string.Empty] = value;
+                _cache.Set(string.Empty,
+                    value,
+                    _policy);
             }
         }
         #endregion
