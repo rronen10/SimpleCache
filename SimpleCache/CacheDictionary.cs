@@ -19,7 +19,7 @@ namespace SimpleCache
         /// </summary>
         /// <param name="getValueFunc">Function that returns the object (When the object is not in the cache, this method will be called)</param>
         public CacheDictionary(Func<TKey, TValue> getValueFunc)
-            : this(Properties.Settings.Default.DefaultCacheTimeoutSeconds, getValueFunc)
+            : this(60, getValueFunc)
         {
         }
 
@@ -111,7 +111,9 @@ namespace SimpleCache
             }
             set
             {
-                _cache[key.ToString()] = value;
+                _cache.Set(key.ToString(),
+                    value,
+                    _policy);
             }
         }
 
