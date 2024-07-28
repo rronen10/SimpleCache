@@ -6,7 +6,7 @@
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <AssemblyVersion>2.0.0.0</AssemblyVersion>
     <FileVersion>2.0.0.0</FileVersion>
-    <Version>2.0.0</Version>
+    <Version>3.0.0</Version>
     <Authors>rronen</Authors>
     <Company>rronen</Company>
     <PackageProjectUrl>http://www.codeproject.com/Tips/396603/Simple-cache-object-and-cache-dictionary</PackageProjectUrl>

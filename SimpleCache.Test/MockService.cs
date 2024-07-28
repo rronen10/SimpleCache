@@ -18,6 +18,30 @@ namespace SimpleCache.Test
             throw new KeyNotFoundException();
         }
 
+        public SampleObjectWithTimestamp GetCityByImage(LargeInputData largeInputData)
+        {
+            byte[] newYorkImage = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+            byte[] jerusalemImage = new byte[] { 0x0A, 0x0B, 0x0C, 0x0D };
+            byte[] londonImage = new byte[] { 0x10, 0x20, 0x30, 0x40 };
+
+            var cityImage = largeInputData.CityImage;
+            if (cityImage.SequenceEqual(newYorkImage))
+            {
+                return new SampleObjectWithTimestamp("New York");
+            }
+            else if (cityImage.SequenceEqual(jerusalemImage))
+            {
+                return new SampleObjectWithTimestamp("Jerusalem");
+            }
+            else if (cityImage.SequenceEqual(londonImage))
+            {
+                return new SampleObjectWithTimestamp("London");
+            }
+
+            throw new KeyNotFoundException();
+        }
+
+
         public SampleObjectWithTimestamp GetUserName()
         {
             return new SampleObjectWithTimestamp("Some User Name");
