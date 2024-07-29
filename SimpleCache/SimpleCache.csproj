@@ -1,12 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <TargetFramework>net6.0</TargetFramework>
+	  <TargetFramework>netstandard2.1</TargetFramework>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <AssemblyVersion>2.0.0.0</AssemblyVersion>
     <FileVersion>2.0.0.0</FileVersion>
-    <Version>3.0.0</Version>
+    <Version>3.1.0</Version>
     <Authors>rronen</Authors>
     <Company>rronen</Company>
     <PackageProjectUrl>http://www.codeproject.com/Tips/396603/Simple-cache-object-and-cache-dictionary</PackageProjectUrl>
