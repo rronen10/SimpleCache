@@ -10,7 +10,7 @@ namespace SimpleCache
     /// Object this cache behaviors.
     /// </summary>
     /// <typeparam name="T">The object type</typeparam>
-    public class CacheObject<T>
+    public class CacheObject<T> : IDisposable
     {
         #region Ctor
         /// <summary>
@@ -18,31 +18,46 @@ namespace SimpleCache
         /// </summary>
         /// <param name="getValueFunc">Function that returns the object (When the object is not in the cache, this method will be called)</param>
         public CacheObject(Func<T> getValueFunc)
-            : this(60, getValueFunc)
+            : this(60, getValueFunc, false)
         {
         }
 
         /// <summary>
         /// Constractor for CacheObject.
         /// </summary>
-        /// <param name="chashTimeoutSeconds">Expiration time(seconds) for cache</param>
+        /// <param name="cacheTimeoutSeconds">Expiration time(seconds) for cache</param>
         /// <param name="getValueFunc">Function that returns the object (When the object is not in the cache, this method will be called)</param>
-        public CacheObject(int chashTimeoutSeconds, Func<T> getValueFunc)
+        public CacheObject(int cacheTimeoutSeconds, Func<T> getValueFunc)
+            : this(cacheTimeoutSeconds, getValueFunc, false)
         {
-            _chashTimeoutSeconds = chashTimeoutSeconds;
+        }
+
+        /// <summary>
+        /// Constractor for CacheObject.
+        /// </summary>
+        /// <param name="cacheTimeoutSeconds">Expiration time(seconds) for cache</param>
+        /// <param name="getValueFunc">Function that returns the object (When the object is not in the cache, this method will be called)</param>
+        /// <param name="disposeCachedValuesOnRemoval">Whether the cache owns and disposes cached IDisposable values when they are removed</param>
+        public CacheObject(int cacheTimeoutSeconds, Func<T> getValueFunc, bool disposeCachedValuesOnRemoval)
+        {
+            if (cacheTimeoutSeconds <= 0)
+                throw new ArgumentOutOfRangeException(nameof(cacheTimeoutSeconds));
+            if (getValueFunc == null)
+                throw new ArgumentNullException(nameof(getValueFunc));
+
+            _cacheTimeoutSeconds = cacheTimeoutSeconds;
+            _disposeCachedValuesOnRemoval = disposeCachedValuesOnRemoval;
             _cache = new MemoryCache(Guid.NewGuid().ToString());
-            _policy = new CacheItemPolicy();
-            _policy.AbsoluteExpiration = DateTimeOffset.Now.AddSeconds(_chashTimeoutSeconds);
             _getValueFunc = getValueFunc;
         }
         #endregion
 
         #region Members
-        private Func<T> _getValueFunc;
-        private CacheItemPolicy _policy;
-        private ObjectCache _cache;
-        private static object lockingObject = new object();
-        private int _chashTimeoutSeconds;
+        private readonly Func<T> _getValueFunc;
+        private readonly ObjectCache _cache;
+        private readonly object _syncRoot = new object();
+        private readonly int _cacheTimeoutSeconds;
+        private readonly bool _disposeCachedValuesOnRemoval;
         #endregion
 
         #region Properties
@@ -53,16 +68,17 @@ namespace SimpleCache
         {
             get
             {
-                lock (_cache)
+                lock (_syncRoot)
                 {
                     return GetValue();
                 }
             }
             set
             {
+                var policy = CreatePolicy();
                 _cache.Set(string.Empty,
                     value,
-                    _policy);
+                    policy);
             }
         }
         #endregion
@@ -80,13 +96,36 @@ namespace SimpleCache
                 cacheValue = _getValueFunc.Invoke();
 
                 //set the new value to the cech
+                var policy = CreatePolicy();
                 _cache.Set(string.Empty,
                     cacheValue,
-                    _policy);
-                //refresh the cech timeout
-                _policy.AbsoluteExpiration = DateTimeOffset.Now.AddSeconds(_chashTimeoutSeconds);
+                    policy);
             }
             return (T)cacheValue;
+        }
+
+        private CacheItemPolicy CreatePolicy()
+        {
+            var policy = new CacheItemPolicy
+            {
+                AbsoluteExpiration = DateTimeOffset.UtcNow.AddSeconds(_cacheTimeoutSeconds)
+            };
+
+            if (_disposeCachedValuesOnRemoval)
+                policy.RemovedCallback = DisposeRemovedValue;
+
+            return policy;
+        }
+
+        private static void DisposeRemovedValue(CacheEntryRemovedArguments arguments)
+        {
+            if (arguments.CacheItem.Value is IDisposable disposable)
+                disposable.Dispose();
+        }
+
+        public void Dispose()
+        {
+            ((IDisposable)_cache).Dispose();
         }
         #endregion
     }

@@ -10,33 +10,51 @@ namespace SimpleCache
     /// </summary>
     /// <typeparam name="TKey">The type of the keys in the dictionary</typeparam>
     /// <typeparam name="TResultOutput">The type of the values in the dictionary</typeparam>
-    public class CacheDictionaryWithInput<TKey, TRequestInput, TResultOutput> : Dictionary<TKey, TResultOutput>
+    public class CacheDictionaryWithInput<TKey, TRequestInput, TResultOutput> : Dictionary<TKey, TResultOutput>, IDisposable
         where TRequestInput: IKeyAbstruction<TKey>
     {
+        // MemoryCache is the real storage; inherited Dictionary members may not reflect cached entries.
         private readonly ObjectCache _cache;
-        private readonly CacheItemPolicy _policy;
-        private Func<TRequestInput, TResultOutput> _getValueFunc;
-        private readonly int _chashTimeoutSeconds;
+        private readonly object _syncRoot = new object();
+        private readonly Func<TRequestInput, TResultOutput> _getValueFunc;
+        private readonly int _cacheTimeoutSeconds;
+        private readonly bool _disposeCachedValuesOnRemoval;
 
         /// <summary>
         /// Constractor for CacheDictionary.
         /// </summary>
         /// <param name="getValueFunc">Function that returns the object (When the object is not in the cache, this method will be called)</param>
         public CacheDictionaryWithInput(Func<TRequestInput, TResultOutput> getValueFunc)
-            : this(60, getValueFunc)
+            : this(60, getValueFunc, false)
         {
         }
 
         /// <summary>
         /// Constractor for CacheDictionary.
         /// </summary>
-        /// <param name="chashTimeoutSeconds">Expiration time(seconds) for cache</param>
+        /// <param name="cacheTimeoutSeconds">Expiration time(seconds) for cache</param>
         /// <param name="getValueFunc">Function that returns the object (When the object is not in the cache, this method will be called)</param>
-        public CacheDictionaryWithInput(int chashTimeoutSeconds, Func<TRequestInput, TResultOutput> getValueFunc)
+        public CacheDictionaryWithInput(int cacheTimeoutSeconds, Func<TRequestInput, TResultOutput> getValueFunc)
+            : this(cacheTimeoutSeconds, getValueFunc, false)
         {
-            _chashTimeoutSeconds = chashTimeoutSeconds;
+        }
+
+        /// <summary>
+        /// Constractor for CacheDictionary.
+        /// </summary>
+        /// <param name="cacheTimeoutSeconds">Expiration time(seconds) for cache</param>
+        /// <param name="getValueFunc">Function that returns the object (When the object is not in the cache, this method will be called)</param>
+        /// <param name="disposeCachedValuesOnRemoval">Whether the cache owns and disposes cached IDisposable values when they are removed</param>
+        public CacheDictionaryWithInput(int cacheTimeoutSeconds, Func<TRequestInput, TResultOutput> getValueFunc, bool disposeCachedValuesOnRemoval)
+        {
+            if (cacheTimeoutSeconds <= 0)
+                throw new ArgumentOutOfRangeException(nameof(cacheTimeoutSeconds));
+            if (getValueFunc == null)
+                throw new ArgumentNullException(nameof(getValueFunc));
+
+            _cacheTimeoutSeconds = cacheTimeoutSeconds;
+            _disposeCachedValuesOnRemoval = disposeCachedValuesOnRemoval;
             _cache = new MemoryCache(Guid.NewGuid().ToString());
-            _policy = new CacheItemPolicy { AbsoluteExpiration = DateTimeOffset.Now.AddSeconds(chashTimeoutSeconds) };
             _getValueFunc = getValueFunc;
         }
 
@@ -49,7 +67,7 @@ namespace SimpleCache
         {
             get
             {
-                return _cache.Count();
+                return checked((int)_cache.GetCount());
             }
         }
 
@@ -60,9 +78,10 @@ namespace SimpleCache
         /// <param name="value">The value in the dictionary</param>
         private new void Add(TKey key, TResultOutput value)
         {
+            var policy = CreatePolicy();
             _cache.Set(key.ToString(),
                 value,
-                _policy);
+                policy);
         }
 
         /// <summary>
@@ -85,7 +104,7 @@ namespace SimpleCache
             get
             {
                 //Handle multi threads
-                lock (_cache)
+                lock (_syncRoot)
                 {
                     //Try to get the value from the cech
                     var cacheValue = _cache[requestInput.Key.ToString()];
@@ -98,18 +117,16 @@ namespace SimpleCache
 
                         //set the new value to the cech
                         Add(requestInput.Key, (TResultOutput)cacheValue);
-
-
-                        _policy.AbsoluteExpiration = DateTimeOffset.Now.AddSeconds(_chashTimeoutSeconds);
                     }
                     return (TResultOutput)cacheValue;
                 }
             }
             set
             {
+                var policy = CreatePolicy();
                 _cache.Set(requestInput.Key.ToString(),
                     value,
-                    _policy);
+                    policy);
             }
         }
 
@@ -122,6 +139,30 @@ namespace SimpleCache
         {
             var cacheValue = _cache[key.ToString()];
             return cacheValue != null;
+        }
+
+        public void Dispose()
+        {
+            ((IDisposable)_cache).Dispose();
+        }
+
+        private CacheItemPolicy CreatePolicy()
+        {
+            var policy = new CacheItemPolicy
+            {
+                AbsoluteExpiration = DateTimeOffset.UtcNow.AddSeconds(_cacheTimeoutSeconds)
+            };
+
+            if (_disposeCachedValuesOnRemoval)
+                policy.RemovedCallback = DisposeRemovedValue;
+
+            return policy;
+        }
+
+        private static void DisposeRemovedValue(CacheEntryRemovedArguments arguments)
+        {
+            if (arguments.CacheItem.Value is IDisposable disposable)
+                disposable.Dispose();
         }
     }
 }
