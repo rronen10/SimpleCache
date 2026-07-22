@@ -16,7 +16,7 @@ namespace SimpleCache.Test
         [Test]
         public void CacheDictionaryWithInputTest()
         {
-            var listOfCities = new CacheDictionaryWithInput<string, LargeInputData, SampleObjectWithTimestamp>(2,
+            using var listOfCities = new CacheDictionaryWithInput<string, LargeInputData, SampleObjectWithTimestamp>(2,
                 input =>
                 {
                     return _service.GetCityByImage(input);
@@ -70,6 +70,150 @@ namespace SimpleCache.Test
             Assert.AreNotEqual(listOfCities[jerusalemLargeInputData].Timestamp, retryGetCity2.Timestamp);
             Assert.AreNotEqual(listOfCities[londonLargeInputData].Timestamp, retryGetCity3.Timestamp);
         }
+
+        [TestCase(0)]
+        [TestCase(-1)]
+        public void Constructor_WithNonPositiveTimeout_Throws(int cacheTimeoutSeconds)
+        {
+            Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+                new CacheDictionaryWithInput<string, LargeInputData, SampleObjectWithTimestamp>(
+                    cacheTimeoutSeconds,
+                    _ => new SampleObjectWithTimestamp("value")));
+        }
+
+        [Test]
+        public void Constructor_WithNullGetValueFunc_Throws()
+        {
+            Assert.Throws<System.ArgumentNullException>(() =>
+                new CacheDictionaryWithInput<string, LargeInputData, SampleObjectWithTimestamp>(null!));
+        }
+
+        [Test]
+        public void CacheFacingDictionaryApis_UseMemoryCacheEntries()
+        {
+            var getValueCallCount = 0;
+            using var cache = new CacheDictionaryWithInput<
+                string,
+                LargeInputData,
+                SampleObjectWithTimestamp>(
+                    60,
+                    _ =>
+                    {
+                        getValueCallCount++;
+                        return new SampleObjectWithTimestamp("factory value");
+                    });
+            var requestInput = new LargeInputData
+            {
+                CityImage = new byte[] { 0x01 }
+            };
+            var expected = new SampleObjectWithTimestamp("assigned value");
+
+            cache[requestInput] = expected;
+
+            Assert.AreEqual(1, cache.Count);
+            Assert.IsTrue(cache.ContainsKey(requestInput.Key));
+            Assert.AreSame(expected, cache[requestInput]);
+            Assert.AreEqual(0, getValueCallCount);
+            Assert.IsTrue(cache.Remove(requestInput.Key));
+            Assert.AreEqual(0, cache.Count);
+            Assert.IsFalse(cache.ContainsKey(requestInput.Key));
+            Assert.IsFalse(cache.Remove(requestInput.Key));
+            Assert.That(
+                cache,
+                Is.AssignableTo<System.Collections.Generic.Dictionary<
+                    string,
+                    SampleObjectWithTimestamp>>());
+        }
+
+        [Test]
+        public void Insertions_CreatePoliciesAtInsertionTime()
+        {
+            var getValueCallCount = 0;
+            using var cache = new CacheDictionaryWithInput<
+                string,
+                LargeInputData,
+                SampleObjectWithTimestamp>(
+                    1,
+                    _ =>
+                    {
+                        getValueCallCount++;
+                        return new SampleObjectWithTimestamp("generated value");
+                    });
+            var generatedInput = new LargeInputData
+            {
+                CityImage = new byte[] { 0x01 }
+            };
+            var assignedInput = new LargeInputData
+            {
+                CityImage = new byte[] { 0x02 }
+            };
+
+            Thread.Sleep(1100);
+
+            var generatedValue = cache[generatedInput];
+
+            Assert.AreSame(generatedValue, cache[generatedInput]);
+            Assert.AreEqual(1, getValueCallCount);
+
+            var assignedValue = new SampleObjectWithTimestamp("assigned value");
+            cache[assignedInput] = assignedValue;
+
+            Assert.AreSame(assignedValue, cache[assignedInput]);
+            Assert.AreEqual(1, getValueCallCount);
+        }
+
+        [Test]
+        public void CachedValues_AreNotDisposedByDefault()
+        {
+            var cachedValue = new TrackingDisposable();
+            var requestInput = new LargeInputData
+            {
+                CityImage = new byte[] { 0x01 }
+            };
+            using var cache = new CacheDictionaryWithInput<string, LargeInputData, TrackingDisposable>(
+                60,
+                _ => cachedValue);
+
+            cache[requestInput] = cachedValue;
+            cache.Remove(requestInput.Key);
+
+            Assert.AreEqual(0, cachedValue.DisposeCallCount);
+        }
+
+        [Test]
+        public void CachedValues_AreDisposedOnRemovalAndCacheDisposal_WhenEnabled()
+        {
+            var removedValue = new TrackingDisposable();
+            var remainingValue = new TrackingDisposable();
+            var removedInput = new LargeInputData
+            {
+                CityImage = new byte[] { 0x01 }
+            };
+            var remainingInput = new LargeInputData
+            {
+                CityImage = new byte[] { 0x02 }
+            };
+
+            using (var cache = new CacheDictionaryWithInput<
+                string,
+                LargeInputData,
+                TrackingDisposable>(
+                    60,
+                    _ => removedValue,
+                    disposeCachedValuesOnRemoval: true))
+            {
+                Assert.AreSame(removedValue, cache[removedInput]);
+                cache[remainingInput] = remainingValue;
+
+                Assert.IsTrue(cache.Remove(removedInput.Key));
+                Assert.AreEqual(1, removedValue.DisposeCallCount);
+                Assert.AreEqual(0, remainingValue.DisposeCallCount);
+            }
+
+            Assert.AreEqual(1, remainingValue.DisposeCallCount);
+        }
+
+
 
     }
 

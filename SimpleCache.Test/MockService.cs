@@ -61,4 +61,14 @@ namespace SimpleCache.Test
         public DateTime Timestamp { get; private set; }
     }
 
+
+    public class TrackingDisposable : IDisposable
+    {
+        public int DisposeCallCount { get; private set; }
+
+        public void Dispose()
+        {
+            DisposeCallCount++;
+        }
+    }
 }

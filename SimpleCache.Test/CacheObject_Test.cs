@@ -15,7 +15,7 @@ namespace SimpleCache.Test
         [Test]
         public void CacheObjectTest()
         {
-            var userNameCached = new CacheObject<SampleObjectWithTimestamp>(3, () => _service.GetUserName());
+            using var userNameCached = new CacheObject<SampleObjectWithTimestamp>(3, () => _service.GetUserName());
             
             //Get the value for the firs time - call the service.
             var userName = _service.GetUserName();
@@ -35,6 +35,54 @@ namespace SimpleCache.Test
             Assert.AreNotEqual(userNameCached.Value.Timestamp, time);
 
         }
+
+        [TestCase(0)]
+        [TestCase(-1)]
+        public void Constructor_WithNonPositiveTimeout_Throws(int cacheTimeoutSeconds)
+        {
+            Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+                new CacheObject<int>(cacheTimeoutSeconds, () => 1));
+        }
+
+        [Test]
+        public void Constructor_WithNullGetValueFunc_Throws()
+        {
+            Assert.Throws<System.ArgumentNullException>(() => new CacheObject<int>(null!));
+        }
+
+        [Test]
+        public void CachedValues_AreNotDisposedByDefault()
+        {
+            var cachedValue = new TrackingDisposable();
+            var cache = new CacheObject<TrackingDisposable>(60, () => cachedValue);
+            cache.Value = cachedValue;
+
+            cache.Dispose();
+
+            Assert.AreEqual(0, cachedValue.DisposeCallCount);
+        }
+
+        [Test]
+        public void CachedValues_AreDisposedOnReplacementAndCacheDisposal_WhenEnabled()
+        {
+            var replacedValue = new TrackingDisposable();
+            var currentValue = new TrackingDisposable();
+
+            using (var cache = new CacheObject<TrackingDisposable>(
+                60,
+                () => new TrackingDisposable(),
+                disposeCachedValuesOnRemoval: true))
+            {
+                cache.Value = replacedValue;
+                cache.Value = currentValue;
+
+                Assert.AreEqual(1, replacedValue.DisposeCallCount);
+                Assert.AreEqual(0, currentValue.DisposeCallCount);
+            }
+
+            Assert.AreEqual(1, currentValue.DisposeCallCount);
+        }
+
 
     }
 }
